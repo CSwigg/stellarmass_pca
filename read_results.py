@@ -42,6 +42,20 @@ class PCAOutput(fits.HDUList):
     '''
     @classmethod
     def from_fname(cls, fname, *args, **kwargs):
+        """ Constructs an instance of PCAOutput from a given results FITS file.
+        
+        Parameters
+        ----------
+        fits : [type]
+            [description]
+        fname : str
+            Name of FITS file
+        
+        Returns
+        -------
+        ret : [type]
+            [description]
+        """
         ret = super().fromfile(fname, *args, **kwargs)
         return ret
 
@@ -52,6 +66,18 @@ class PCAOutput(fits.HDUList):
         return super().fromfile(fname, *args, **kwargs)
 
     def getdata(self, extname):
+        """[summary]
+        
+        Parameters
+        ----------
+        extname : [type]
+            [description]
+        
+        Returns
+        -------
+        [type]
+            [description]
+        """
         '''
         get full array in one extension
         '''
