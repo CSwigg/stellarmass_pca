@@ -3,8 +3,10 @@ import faulthandler; faulthandler.enable()
 
 mpl_v = 'MPL-8'
 daptype = 'SPX-MILESHC-MILESHC'
-csp_basedir = os.environ['STELLARMASS_PCA_CSPBASE']
+os.environ['STELLARMASS_PCA_RESULTSDIR'] = '/Users/admin/sas/mangawork/manga/mangapca/zachpace/CSPs_CKC14_MaNGA_20190215-1/v2_5_3/2.3.0/results'
 manga_results_basedir = os.environ['STELLARMASS_PCA_RESULTSDIR']
+os.environ['STELLARMASS_PCA_CSPBASE'] = '/Users/admin/sas/mangawork/manga/mangapca/zachpace/CSPs_CKC14_MaNGA_20190215-1'
+csp_basedir = os.environ['STELLARMASS_PCA_CSPBASE']
 mocks_results_basedir = os.path.join(
     os.environ['STELLARMASS_PCA_RESULTSDIR'], 'mocks')
 

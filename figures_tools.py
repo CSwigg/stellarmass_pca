@@ -122,3 +122,5 @@ def gen_gridspec_fig(N, add_row=False, spsize=(1.75, 1.25),
                            wspace=wspace, hspace=hspace, **kwargs)
 
     return gs, fig
+
+

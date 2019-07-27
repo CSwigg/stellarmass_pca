@@ -53,24 +53,23 @@ class PCAOutput(fits.HDUList):
         
         Returns
         -------
-        ret : [type]
-            [description]
+        ret : __main__.PCAOutput
+            Returned construction of PCAOutput() instance
         """
         ret = super().fromfile(fname, *args, **kwargs)
         return ret
 
     @classmethod
     def from_plateifu(cls, basedir, plate, ifu, *args, **kwargs):
-        fname = os.path.join(basedir, '{}-{}'.format(plate, ifu),
-                             '{}-{}_res.fits'.format(plate, ifu))
-        return super().fromfile(fname, *args, **kwargs)
-
-    def getdata(self, extname):
-        """[summary]
+        """ Constructs an instanceof PCAOutput form a given results FITS file. 
         
         Parameters
         ----------
-        extname : [type]
+        basedir : [type]
+            [description]
+        plate : str
+            [description]
+        ifu : [type]
             [description]
         
         Returns
@@ -78,21 +77,74 @@ class PCAOutput(fits.HDUList):
         [type]
             [description]
         """
-        '''
-        get full array in one extension
-        '''
+        fname = os.path.join(basedir, '{}-{}'.format(plate, ifu),
+                             '{}-{}_res.fits'.format(plate, ifu))
+        return super().fromfile(fname, *args, **kwargs)
+
+    def getdata(self, extname):
+        """ Accesses array of data values of PCAOutput instance with given extension.
+        
+        Parameters
+        ----------
+        extname : str
+            HDU extension name
+        
+        Returns
+        -------
+        numpy.ndarray
+            NumPy array of accessed data
+        """
+
         return self[extname].data
 
     def flattenedmap(self, extname):
+        """ Flattenes 2D array of data from HDU extension into 1D array. 
+        
+        Parameters
+        ----------
+        extname : str
+            HDU extension name
+        
+        Returns
+        -------
+        numpy.ndarray
+            Flattened NumPy array of accessed data
+        """
         return self.getdata(extname).flatten()
 
     def cubechannel(self, extname, ch):
-        '''
-        get one channel (indexed along axis 0) of one extension
-        '''
+        """ Get one channel (indexed along axis 0) of one extension
+        
+        Parameters
+        ----------
+        extname : str
+            HDU extension name
+        ch : int
+            Extension channel index 
+        
+        Returns
+        -------
+        numpy.ndarray
+            NumPy array of data at specified HDU extension channel
+        """
+        
         return self.getdata(extname)[ch]
 
     def flattenedcubechannel(self, extname, ch):
+        """ Flattenes 2D array of data from HDU extension channel into 1D array.
+        
+        Parameters
+        ----------
+        extname : str
+            HDU extension name
+        ch : int
+            Extension channel index
+        
+        Returns
+        -------
+        numpy.ndarray
+            Flattened NumPy array of accessed data
+        """
         return self.cubechannel(extname, ch).flatten()
 
     def flattenedcubechannels(self, extname, chs):
@@ -100,6 +152,20 @@ class PCAOutput(fits.HDUList):
                          for ch in chs])
 
     def param_dist_med(self, extname, flatten=False):
+        """Accesses the median (Oth) channel of an extension
+        
+        Parameters
+        ----------
+        extname : str
+            HDU extension name 
+        flatten : bool, optional
+            Flattens 2D array into 1D, by default False
+        
+        Returns
+        -------
+        numpy.ndarray
+            Median (0th) channel of specified HDU extension
+        """
         med = self.cubechannel(extname, 0)
         if flatten:
             med = med.flatten()
@@ -107,6 +173,20 @@ class PCAOutput(fits.HDUList):
         return med
 
     def param_dist_wid(self, extname, flatten=False):
+        """[summary]
+        
+        Parameters
+        ----------
+        extname : [type]
+            [description]
+        flatten : bool, optional
+            [description], by default False
+        
+        Returns
+        -------
+        [type]
+            [description]
+        """
         distwid = self.cubechannel(extname, 2) + self.cubechannel(extname, 1)
         if flatten:
             distwid = distwid.flatten()
@@ -114,6 +194,13 @@ class PCAOutput(fits.HDUList):
         return distwid
 
     def setup_photometry(self, pca_system):
+        """
+        
+        Parameters
+        ----------
+        pca_system : PCASystem() 
+            Instance of PCASystem
+        """
         fitcube_f = self.getdata('NORM') * \
                     (np.einsum('al,a...->l...', pca_system.E, self.getdata('CALPHA')) + \
                      pca_system.M[:, None, None]) * m.spec_unit
@@ -220,3 +307,17 @@ def fit_spec2phot(res, pca_system):
 
     return spec2phot
 
+class qtyFig():
+    
+
+    def __init__(self, res):
+
+        self.res = res
+
+    def make_plot(self, qty_str, qty_tex=None, qty_fname=None, f=None, logify=False, TeX_over=None):
+        if qty_fname is None:
+            qty_fname = qty_str
+
+        if qty_tex is None:
+            qty_tex = self.pca.metadata[qty_str].meta.get(
+                'TeX', qty_str)
