@@ -15,6 +15,9 @@ from glob import glob
 import os
 from functools import lru_cache
 
+import figures_tools
+import matplotlib.pyplot as plt
+
 class PCASystem(fits.HDUList):
     @property
     def M(self):
@@ -310,14 +313,106 @@ def fit_spec2phot(res, pca_system):
 class qtyFig():
     
 
-    def __init__(self, res):
+    def qty_map(self, pca_out: PCAOutput, qty_str, ax1, ax2, f=None, norm=[None, None],
+                logify=False, TeX_over=None):
+        '''
+        make a map of the quantity of interest, based on the constructed
+            parameter PDF
 
-        self.res = res
+        params:
+         - qty_str: string designating which quantity from self.metadata
+            to access
+         - ax1: where median map gets shown
+         - ax2: where sigma map gets shown
+         - f: factor to multiply percentiles by
+         - log: whether to take log10 of
+        '''
+        
+        d = pca_out[qty_str].data
+        P50, l_unc, u_unc = d[0], d[1], d[2]
+        
+        scale = 'log'
+        # P50, l_unc, u_unc, scale = self.pca.param_cred_intvl(
+        #     qty=qty_str, factor=f, W=self.w,
+        #     mask=np.logical_or(self.mask_map, ~self.fit_success))
 
-    def make_plot(self, qty_str, qty_tex=None, qty_fname=None, f=None, logify=False, TeX_over=None):
+        # if not TeX_over:
+        #     med_TeX = self.pca.metadata[qty_str].meta.get('TeX', qty_str)
+        # else:
+        #     med_TeX = TeX_over
+        med_TeX = TeX_over
+        # manage logs for computation and display simultaneously
+        if logify and (scale == 'log'):
+            raise ValueError('don\'t double-log a quantity!')
+        elif logify:
+            P50 = np.log10(P50)
+            unc = np.log10((u_unc + l_unc) / 2.)
+            sigma_TeX = r'$\sigma~{\rm [dex]}$'
+            #med_TeX = ''.join((r'$\log$', med_TeX))
+        elif (scale == 'log'):
+            unc = (u_unc + l_unc) / 2.
+            sigma_TeX = r'$\sigma~{\rm [dex]}$'
+            #med_TeX = ''.join((r'$\log$', med_TeX))
+        else:
+            unc = (l_unc + u_unc) / 2.
+            sigma_TeX = r'$\sigma$'
+    
+        mask = pca_out.mask
+
+        m_vmin, m_vmax = np.percentile(np.ma.array(P50, mask=mask).compressed(), [2., 98.])
+        m = ax1.imshow(
+            np.ma.array(P50, mask=mask),
+            aspect='equal', norm=norm[0], vmin=m_vmin, vmax=m_vmax)
+
+        s_vmin, s_vmax = np.percentile(np.ma.array(unc, mask=mask).compressed(),
+                                       [2., 98.])
+        s = ax2.imshow(
+            np.ma.array(unc, mask=mask),
+            aspect='equal', norm=norm[1], vmin=s_vmin, vmax=s_vmax)
+
+        mcb = plt.colorbar(m, ax=ax1, pad=0.025)
+        mcb.set_label(med_TeX, size='xx-small')
+        mcb.ax.tick_params(labelsize='xx-small')
+
+        scb = plt.colorbar(s, ax=ax2, pad=0.025)
+        scb.set_label(sigma_TeX, size=8)
+        scb.ax.tick_params(labelsize='xx-small')
+
+        return m, s, mcb, scb, scale
+
+
+
+
+    def make_qty_fig(self, qty_str, qty_tex=None, qty_fname=None, f=None,
+                        logify=False, TeX_over=None):
+        '''
+        make a with a map of the quantity of interest
+
+        params:
+            - qty_str: string designating which quantity from self.metadata
+            to access
+            - qty_tex: valid TeX for plot
+            - qty_fname: override for final filename (usually used when `f` is)
+            - f: factor by which to multiply map
+        '''
         if qty_fname is None:
             qty_fname = qty_str
 
         if qty_tex is None:
             qty_tex = self.pca.metadata[qty_str].meta.get(
                 'TeX', qty_str)
+
+        fig, gs, ax1, ax2 = self.__setup_qty_fig__()
+
+        m, s, mcb, scb, scale = self.qty_map(
+            qty_str=qty_str, ax1=ax1, ax2=ax2, f=f, logify=logify,
+            TeX_over=TeX_over)
+
+        fig.suptitle('{}: {}'.format(self.objname, qty_tex))
+
+        self.__fix_im_axs__([ax1, ax2])
+        fname = '{}-{}.png'.format(self.objname, qty_fname)
+        self.savefig(fig, fname, self.figdir, dpi=300)
+
+        return fig
+
