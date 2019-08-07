@@ -17,6 +17,7 @@ from functools import lru_cache
 
 import figures_tools
 import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 class PCASystem(fits.HDUList):
     @property
@@ -383,7 +384,7 @@ class qtyFig():
 
 
 
-    def make_qty_fig(self, qty_str, qty_tex=None, qty_fname=None, f=None,
+    def make_qty_fig(self, pca_out:PCAOutput, qty_str, qty_tex=None, qty_fname=None, f=None,
                         logify=False, TeX_over=None):
         '''
         make a with a map of the quantity of interest
@@ -398,17 +399,19 @@ class qtyFig():
         if qty_fname is None:
             qty_fname = qty_str
 
-        if qty_tex is None:
-            qty_tex = self.pca.metadata[qty_str].meta.get(
-                'TeX', qty_str)
+        # if qty_tex is None:
+        #     qty_tex = self.pca.metadata[qty_str].meta.get(
+        #         'TeX', qty_str)
 
-        fig, gs, ax1, ax2 = self.__setup_qty_fig__()
-
+        fig, gs = figures_tools.gen_gridspec_fig(2)
+        
+        # ax1, ax2 = self.__setup_qty_fig__()
+        ax1, ax2 = plt.axes(), plt.axes()
         m, s, mcb, scb, scale = self.qty_map(
             qty_str=qty_str, ax1=ax1, ax2=ax2, f=f, logify=logify,
             TeX_over=TeX_over)
 
-        fig.suptitle('{}: {}'.format(self.objname, qty_tex))
+        # fig.suptitle('{}: {}'.format(self.objname, qty_tex))
 
         self.__fix_im_axs__([ax1, ax2])
         fname = '{}-{}.png'.format(self.objname, qty_fname)
