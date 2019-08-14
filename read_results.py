@@ -19,6 +19,9 @@ import figures_tools
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
 
+from astropy import coordinates as coord
+from astropy import wcs
+import astropy.units as u
 class PCASystem(fits.HDUList):
     @property
     def M(self):
@@ -197,6 +200,8 @@ class PCAOutput(fits.HDUList):
 
         return distwid
 
+
+    # Possibly delete
     def setup_photometry(self, pca_system):
         """
         
@@ -210,7 +215,8 @@ class PCAOutput(fits.HDUList):
                      pca_system.M[:, None, None]) * m.spec_unit
         self.spec2phot = spectrophot.Spec2Phot(
             lam=pca_system.l * m.l_unit, flam=fitcube_f, axis=0)
-
+    
+    # Possibly delete 
     def get_color(self, b1, b2, filterset='sdss2010', flatten=False):
         if not hasattr(self, 'spec2phot'):
             raise AttributeError('no spec2phot object initialized')
@@ -314,7 +320,56 @@ def fit_spec2phot(res, pca_system):
 class qtyFig():
     
 
-    def qty_map(self, pca_out: PCAOutput, qty_str, ax1, ax2, f=None, norm=[None, None],
+    def make_qty_fig(self, pca_out:PCAOutput, qty_str, dap = None, qty_tex=None, qty_fname=None, f=None,
+                        logify=False, TeX_over=None):
+        '''
+        make a with a map of the quantity of interest
+
+        params:
+            - qty_str: string designating which quantity from self.metadata
+            to access
+            - qty_tex: valid TeX for plot
+            - qty_fname: override for final filename (usually used when `f` is)
+            - f: factor by which to multiply map
+        '''
+        if qty_fname is None:
+            qty_fname = qty_str
+    
+        # if qty_tex is None:
+        #     qty_tex = self.pca.metadata[qty_str].meta.get(
+        #         'TeX', qty_str)
+
+        self.pca_out = pca_out
+        try:   
+            self.dap = dap
+            # dap[3] is just a convenient choice since it only has 2 dimensions
+            self.wcs_header = wcs.WCS(dap[3])
+        except:
+            # TODO: handle conditions where no DAP product is passed in 
+            pass
+        self.map_shape = self.pca_out.getdata('Mask').shape
+        self.mask = self.pca_out.mask
+        fig, gs, ax1, ax2 = self.__setup_qty_fig__()
+        
+        m, s, mcb, scb, scale = self.qty_map(
+            qty_str=qty_str, ax1=ax1, ax2=ax2, f=f, logify=logify,
+            TeX_over=TeX_over)
+
+        # fig.suptitle('{}: {}'.format(self.objname, qty_tex))
+
+        self.__fix_im_axs__([ax1, ax2])
+        
+
+        #TODO: find self.objname
+        # fname = '{}-{}.png'.format('self.objname', qty_fname)
+        fname = '{}-{}.png'.format('test_fig', qty_fname)
+        # TODO: find self.figdir
+        # plt.savefig(fig, fname, self.figdir, dpi=300)
+
+        plt.savefig('/Users/admin/Desktop/stellarmass_pca/' + fname, overwrite=True, dpi=300)
+        return fig
+
+    def qty_map(self, qty_str, ax1, ax2, f=None, norm=[None, None],
                 logify=False, TeX_over=None):
         '''
         make a map of the quantity of interest, based on the constructed
@@ -329,7 +384,8 @@ class qtyFig():
          - log: whether to take log10 of
         '''
         
-        d = pca_out[qty_str].data
+
+        d = self.pca_out[qty_str].data
         P50, l_unc, u_unc = d[0], d[1], d[2]
         
         scale = 'log'
@@ -357,18 +413,16 @@ class qtyFig():
         else:
             unc = (l_unc + u_unc) / 2.
             sigma_TeX = r'$\sigma$'
-    
-        mask = pca_out.mask
 
-        m_vmin, m_vmax = np.percentile(np.ma.array(P50, mask=mask).compressed(), [2., 98.])
+        m_vmin, m_vmax = np.percentile(np.ma.array(P50, mask=self.mask).compressed(), [2., 98.])
         m = ax1.imshow(
-            np.ma.array(P50, mask=mask),
+            np.ma.array(P50, mask=self.mask),
             aspect='equal', norm=norm[0], vmin=m_vmin, vmax=m_vmax)
 
-        s_vmin, s_vmax = np.percentile(np.ma.array(unc, mask=mask).compressed(),
+        s_vmin, s_vmax = np.percentile(np.ma.array(unc, mask=self.mask).compressed(),
                                        [2., 98.])
         s = ax2.imshow(
-            np.ma.array(unc, mask=mask),
+            np.ma.array(unc, mask=self.mask),
             aspect='equal', norm=norm[1], vmin=s_vmin, vmax=s_vmax)
 
         mcb = plt.colorbar(m, ax=ax1, pad=0.025)
@@ -382,40 +436,79 @@ class qtyFig():
         return m, s, mcb, scb, scale
 
 
-
-
-    def make_qty_fig(self, pca_out:PCAOutput, qty_str, qty_tex=None, qty_fname=None, f=None,
-                        logify=False, TeX_over=None):
+    def __fix_im_axs__(self, axs, bad=True):
         '''
-        make a with a map of the quantity of interest
-
-        params:
-            - qty_str: string designating which quantity from self.metadata
-            to access
-            - qty_tex: valid TeX for plot
-            - qty_fname: override for final filename (usually used when `f` is)
-            - f: factor by which to multiply map
+        do all the fixes to make quantity maps look nice in wcsaxes
         '''
-        if qty_fname is None:
-            qty_fname = qty_str
+        if type(axs) is not list:
+            axs = [axs]
 
-        # if qty_tex is None:
-        #     qty_tex = self.pca.metadata[qty_str].meta.get(
-        #         'TeX', qty_str)
+        # create a sky offset frame to overlay
+        offset_frame = coord.SkyOffsetFrame(
+            origin=coord.SkyCoord(*(self.wcs_header.wcs.crval * u.deg)))
 
-        fig, gs = figures_tools.gen_gridspec_fig(2)
-        
-        # ax1, ax2 = self.__setup_qty_fig__()
-        ax1, ax2 = plt.axes(), plt.axes()
-        m, s, mcb, scb, scale = self.qty_map(
-            qty_str=qty_str, ax1=ax1, ax2=ax2, f=f, logify=logify,
-            TeX_over=TeX_over)
+        # over ax objects
+        for ax in axs:
+            # suppress native coordinate system ticks
+            for ci in range(2):
+                ax.coords[ci].set_ticks(number=5)
+                ax.coords[ci].set_ticks_visible(False)
+                ax.coords[ci].set_ticklabel_visible(False)
+                ax.coords[ci].grid(False)
 
-        # fig.suptitle('{}: {}'.format(self.objname, qty_tex))
+            # initialize overlay
+            offset_overlay = ax.get_coords_overlay(offset_frame)
+            offset_overlay.grid(True)
+            offset_overlay['lon'].set_coord_type('longitude', coord_wrap=180.)
+            ax.set_aspect('equal')
 
-        self.__fix_im_axs__([ax1, ax2])
-        fname = '{}-{}.png'.format(self.objname, qty_fname)
-        self.savefig(fig, fname, self.figdir, dpi=300)
+            for ck, abbr, pos in zip(['lon', 'lat'], [r'\alpha', r'\delta'], ['b', 'l']):
+                offset_overlay[ck].set_axislabel(
+                    r'$\Delta {}~["]$'.format(abbr), size='x-small')
+                offset_overlay[ck].set_axislabel_position(pos)
+                offset_overlay[ck].set_ticks_position(pos)
+                offset_overlay[ck].set_ticklabel_position(pos)
+                offset_overlay[ck].set_format_unit(u.arcsec)
+                offset_overlay[ck].set_ticks(number=5)
+                offset_overlay[ck].set_major_formatter('s.s')
 
-        return fig
+            if bad:
+                # figures_tools.annotate_badPDF(ax, self.goodPDF)
+                pass
+    def __setup_qty_fig__(self):
+        # fig = plt.figure(figsize=(5, 2), dpi=300)
 
+        fig = plt.figure(dpi=300)
+        gs = gridspec.GridSpec(1, 2, wspace=.3, left=.085, right=.975,
+                               bottom=.11, top=.9)
+        ax1 = fig.add_subplot(gs[0], projection=self.wcs_header)
+        ax2 = fig.add_subplot(gs[1], projection=self.wcs_header)
+
+        # overplot hatches for masks
+        # start by defining I & J pixel grid
+        II, JJ = np.meshgrid(*(np.linspace(-.5, ms_ - .5, ms_ + 1)
+                               for ms_ in self.map_shape))
+        IIc, JJc = map(lambda x: 0.5 * (x[:-1, :-1] + x[1:, 1:]), (II, JJ))
+       
+        for ax in [ax1, ax2]:
+            # pcolor plots are masked where the data are GOOD
+            # badpdf mask
+            ax.pcolor(II, JJ,
+                      np.ma.array(np.zeros_like(IIc), mask=~self.pca_out.badPDF()),
+                      hatch='\\'*8, alpha=0.)
+            # dered mask
+            ax.pcolor(II, JJ,
+                      np.ma.array(np.zeros_like(IIc), mask=~self.mask),
+                      hatch='/'*8, alpha=0.)
+            # fit unsuccessful
+            ax.pcolor(II, JJ,
+                      np.ma.array(np.zeros_like(IIc), mask=self.pca_out['SUCCESS']),
+                      hatch='.' * 8, alpha=0.)
+
+        return fig, gs, ax1, ax2
+
+result = PCAOutput.from_fname('/Users/admin/Desktop/stellarmass_pca/8144-3704_res.fits')
+qty_fig = qtyFig()
+new_fig = qty_fig.make_qty_fig(result, 'MLi', fits.open('/Users/admin/Desktop/stellarmass_pca/manga-8144-3704-MAPS-HYB10-GAU-MILESHC.fits.gz'))
+
+print(result.filename())
