@@ -22,6 +22,13 @@ from matplotlib import gridspec
 from astropy import coordinates as coord
 from astropy import wcs
 import astropy.units as u
+
+import yaml
+
+with open('config.yaml', 'r') as ymlfile:
+    cfg = yaml.safe_load(ymlfile)
+    TeX = cfg['TeX']
+
 class PCASystem(fits.HDUList):
     @property
     def M(self):
@@ -53,15 +60,15 @@ class PCAOutput(fits.HDUList):
         
         Parameters
         ----------
-        fits : [type]
-            [description]
+        fits : fits.HDUList
+            A constructed FITS HDUList Object
         fname : str
             Name of FITS file
         
         Returns
         -------
         ret : __main__.PCAOutput
-            Returned construction of PCAOutput() instance
+            Returns construction of PCAOutput() instance
         """
         ret = super().fromfile(fname, *args, **kwargs)
         return ret
@@ -72,17 +79,17 @@ class PCAOutput(fits.HDUList):
         
         Parameters
         ----------
-        basedir : [type]
-            [description]
+        basedir : str
+            Directory to base of all plates
         plate : str
-            [description]
+            Number of plate
         ifu : [type]
-            [description]
+            Number of ifu
         
         Returns
         -------
-        [type]
-            [description]
+        ret : __main__.PCAOutput
+            Returns construction of PCAOutput() instance
         """
         fname = os.path.join(basedir, '{}-{}'.format(plate, ifu),
                              '{}-{}_res.fits'.format(plate, ifu))
@@ -158,6 +165,11 @@ class PCAOutput(fits.HDUList):
         return np.stack([self.flattenedcubechannel(extname, ch)
                          for ch in chs])
 
+
+    def quantity_figure(self, extname):
+        
+        return qtyFig().make_qty_fig(self, extname, fits.open('/Users/admin/Desktop/stellarmass_pca/manga-8144-3704-MAPS-HYB10-GAU-MILESHC.fits.gz'))
+    
     def param_dist_med(self, extname, flatten=False):
         """Accesses the median (Oth) channel of an extension
         
@@ -200,39 +212,15 @@ class PCAOutput(fits.HDUList):
 
         return distwid
 
-
-    # Possibly delete
-    def setup_photometry(self, pca_system):
-        """
-        
-        Parameters
-        ----------
-        pca_system : PCASystem() 
-            Instance of PCASystem
-        """
-        fitcube_f = self.getdata('NORM') * \
-                    (np.einsum('al,a...->l...', pca_system.E, self.getdata('CALPHA')) + \
-                     pca_system.M[:, None, None]) * m.spec_unit
-        self.spec2phot = spectrophot.Spec2Phot(
-            lam=pca_system.l * m.l_unit, flam=fitcube_f, axis=0)
-    
-    # Possibly delete 
-    def get_color(self, b1, b2, filterset='sdss2010', flatten=False):
-        if not hasattr(self, 'spec2phot'):
-            raise AttributeError('no spec2phot object initialized')
-
-        b1 = '-'.join((filterset, b1))
-        b2 = '-'.join((filterset, b2))
-
-        color = self.spec2phot.color(b1, b2)
-
-        if flatten:
-            color = color.flatten()
-
-        return color
-
     @property
     def mask(self):
+        """Creates a mask for a given map based on the map's success parameter for each spaxel.
+        
+        Returns
+        -------
+        numpy.ndarray
+            Numpy array of boolean values representing a data mask
+        """
         return np.logical_or(self.getdata('mask').astype(bool),
                              ~self.getdata('success').astype(bool))
 
@@ -278,15 +266,27 @@ class MocksPCAOutput(PCAOutput):
         return dev / (0.5 * distwid)
 
 def bandpass_mass(res, pca_system, cosmo, band, z):
-    '''
-    reconstruct the stellar mass from a PCA results object
 
-    parameters:
-     - res: PCAOutput instance
-     - pca_system: PCASystem instance
-     - cosmo: instance of astropy.cosmology.Cosmology or subclass
-     - band: 'r', 'i', or 'z'
-    '''
+    """Reconstruct the stellar mass from a PCA results objec
+    
+    Parameters
+    ----------
+    res : [type]
+        PCAOutput instance
+    pca_system : [type]
+        PCASystem instance
+    cosmo : [type]
+        instance of astropy.cosmology.Cosmology or subclass
+    band : [type]
+        'r', 'i', or 'z'
+    z : int
+        redshift
+    
+    Returns
+    -------
+    int
+        Mass in units of solar masses for a given band 
+    """
     spec2phot = fit_spec2phot(res, pca_system)
 
     # apparent magnitude
@@ -338,6 +338,13 @@ class qtyFig():
         # if qty_tex is None:
         #     qty_tex = self.pca.metadata[qty_str].meta.get(
         #         'TeX', qty_str)
+
+        if qty_tex is None:
+            try:
+                self.qty_tex = cfg['TeX'][qty_str]
+            except:
+                self.qty_tex = qty_str
+
 
         self.pca_out = pca_out
         try:   
@@ -397,7 +404,7 @@ class qtyFig():
         #     med_TeX = self.pca.metadata[qty_str].meta.get('TeX', qty_str)
         # else:
         #     med_TeX = TeX_over
-        med_TeX = TeX_over
+        med_TeX = self.qty_tex
         # manage logs for computation and display simultaneously
         if logify and (scale == 'log'):
             raise ValueError('don\'t double-log a quantity!')
@@ -476,14 +483,12 @@ class qtyFig():
                 # figures_tools.annotate_badPDF(ax, self.goodPDF)
                 pass
     def __setup_qty_fig__(self):
-        # fig = plt.figure(figsize=(5, 2), dpi=300)
-
-        fig = plt.figure(dpi=300)
-        gs = gridspec.GridSpec(1, 2, wspace=.3, left=.085, right=.975,
-                               bottom=.11, top=.9)
+        fig = plt.figure(figsize=(7, 3), dpi=300)
+        gs = gridspec.GridSpec(1, 2, wspace=.4, left=.12, right=.93,
+                               bottom=.10, top=.85)
         ax1 = fig.add_subplot(gs[0], projection=self.wcs_header)
         ax2 = fig.add_subplot(gs[1], projection=self.wcs_header)
-
+        
         # overplot hatches for masks
         # start by defining I & J pixel grid
         II, JJ = np.meshgrid(*(np.linspace(-.5, ms_ - .5, ms_ + 1)
@@ -508,7 +513,4 @@ class qtyFig():
         return fig, gs, ax1, ax2
 
 result = PCAOutput.from_fname('/Users/admin/Desktop/stellarmass_pca/8144-3704_res.fits')
-qty_fig = qtyFig()
-new_fig = qty_fig.make_qty_fig(result, 'MLi', fits.open('/Users/admin/Desktop/stellarmass_pca/manga-8144-3704-MAPS-HYB10-GAU-MILESHC.fits.gz'))
-
-print(result.filename())
+result.quantity_figure('MLi')
