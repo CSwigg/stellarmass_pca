@@ -1,3 +1,4 @@
 *.fits
 tremonti_cov/*
 __pycache__/*
+*.png
