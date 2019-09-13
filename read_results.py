@@ -25,6 +25,7 @@ import astropy.units as u
 
 import yaml
 
+
 with open('config.yaml', 'r') as ymlfile:
     cfg = yaml.safe_load(ymlfile)
     TeX = cfg['TeX']
@@ -227,20 +228,16 @@ class PCAOutput(fits.HDUList):
     def badPDF(self, ch=2, thresh=1.0e-4):
         return self.cubechannel('GOODFRAC', ch) < thresh
 
+    # Leave alone
     def get_drp_logcube(self, mpl_v):
         plateifu = self[0].header['PLATEIFU']
         drp = m.load_drp_logcube(*plateifu.split('-'), mpl_v)
         return drp
-
+    # Leave alone
     def get_dap_maps(self, mpl_v, kind):
         plateifu = self[0].header['PLATEIFU']
         drp = m.load_dap_maps(*plateifu.split('-'), mpl_v, kind)
         return drp
-
-    def to_normaldist(self, extname):
-        mu = self.param_dist_med(extname)
-        sd = 0.5 * self.param_dist_wid(extname)
-        return mu, sd
 
 
 class MocksPCAOutput(PCAOutput):
@@ -378,6 +375,8 @@ class qtyFig():
 
     def qty_map(self, qty_str, ax1, ax2, f=None, norm=[None, None],
                 logify=False, TeX_over=None):
+       
+        # plt.style.use('figures.mplstyle')
         '''
         make a map of the quantity of interest, based on the constructed
             parameter PDF
@@ -432,11 +431,11 @@ class qtyFig():
             np.ma.array(unc, mask=self.mask),
             aspect='equal', norm=norm[1], vmin=s_vmin, vmax=s_vmax)
 
-        mcb = plt.colorbar(m, ax=ax1, pad=0.025)
+        mcb = plt.colorbar(m, ax=ax1, fraction=0.046, pad=0.04)
         mcb.set_label(med_TeX, size='xx-small')
         mcb.ax.tick_params(labelsize='xx-small')
 
-        scb = plt.colorbar(s, ax=ax2, pad=0.025)
+        scb = plt.colorbar(s, ax=ax2, fraction=0.046, pad=0.04)
         scb.set_label(sigma_TeX, size=8)
         scb.ax.tick_params(labelsize='xx-small')
 
@@ -483,7 +482,7 @@ class qtyFig():
                 # figures_tools.annotate_badPDF(ax, self.goodPDF)
                 pass
     def __setup_qty_fig__(self):
-        fig = plt.figure(figsize=(7, 3), dpi=300)
+        fig = plt.figure(figsize=(8, 6), dpi=80)
         gs = gridspec.GridSpec(1, 2, wspace=.4, left=.12, right=.93,
                                bottom=.10, top=.85)
         ax1 = fig.add_subplot(gs[0], projection=self.wcs_header)
