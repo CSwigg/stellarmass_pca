@@ -24,11 +24,23 @@ from astropy import wcs
 import astropy.units as u
 
 import yaml
-
+import errno
 
 with open('config.yaml', 'r') as ymlfile:
     cfg = yaml.safe_load(ymlfile)
     TeX = cfg['TeX']
+
+def set_result_directory(user_input):
+
+    if os.path.isdir(user_input):    
+        os.environ['STELLARMASS_PCA_RESULTSDIR'] = str(user_input)
+        manga_results_basedir = os.environ['STELLARMASS_PCA_RESULTSDIR']
+        
+   
+def set_csp_directory(user_input):
+
+    os.envrion['STELLARMASS_PCA_CSPBASE'] = str(user_input)
+    csp_basedir = os.envrion['STELLARMASS_PCA_CSPBASE']
 
 class PCASystem(fits.HDUList):
     @property
@@ -52,9 +64,11 @@ class PCASystem(fits.HDUList):
         return ut.determine_dlogl(self.logl)
 
 class PCAOutput(fits.HDUList):
+    
     '''
     stores output data from PCA that as been written to FITS.
     '''
+
     @classmethod
     def from_fname(cls, fname, *args, **kwargs):
         """ Constructs an instance of PCAOutput from a given results FITS file.
@@ -73,7 +87,7 @@ class PCAOutput(fits.HDUList):
         """
         ret = super().fromfile(fname, *args, **kwargs)
         return ret
-
+    
     @classmethod
     def from_plateifu(cls, basedir, plate, ifu, *args, **kwargs):
         """ Constructs an instanceof PCAOutput form a given results FITS file. 
@@ -93,8 +107,11 @@ class PCAOutput(fits.HDUList):
             Returns construction of PCAOutput() instance
         """
         fname = os.path.join(basedir, '{}-{}'.format(plate, ifu),
-                             '{}-{}_res.fits'.format(plate, ifu))
+                             'mangapca-{}-{}'.format(plate, ifu))
         return super().fromfile(fname, *args, **kwargs)
+    
+    def get_plateifu(self):
+        return self[0].header['PLATEIFU']
 
     def getdata(self, extname):
         """ Accesses array of data values of PCAOutput instance with given extension.
@@ -167,9 +184,9 @@ class PCAOutput(fits.HDUList):
                          for ch in chs])
 
 
-    def quantity_figure(self, extname):
+    def quantity_figure(self, extname, maps_file=None):
         
-        return qtyFig().make_qty_fig(self, extname, fits.open('/Users/admin/Desktop/stellarmass_pca/manga-8144-3704-MAPS-HYB10-GAU-MILESHC.fits.gz'))
+        return qtyFig().make_qty_fig(self, extname, maps_file)
     
     def param_dist_med(self, extname, flatten=False):
         """Accesses the median (Oth) channel of an extension
@@ -329,8 +346,9 @@ class qtyFig():
             - qty_fname: override for final filename (usually used when `f` is)
             - f: factor by which to multiply map
         '''
+        self.qty_str = qty_str
         if qty_fname is None:
-            qty_fname = qty_str
+            qty_fname = self.qty_str
     
         # if qty_tex is None:
         #     qty_tex = self.pca.metadata[qty_str].meta.get(
@@ -344,24 +362,30 @@ class qtyFig():
 
 
         self.pca_out = pca_out
+        self.wcs_proper = False
         try:   
             self.dap = dap
             # dap[3] is just a convenient choice since it only has 2 dimensions
             self.wcs_header = wcs.WCS(dap[3])
+            self.wcs_proper = True
         except:
             # TODO: handle conditions where no DAP product is passed in 
-            pass
+            self.wcs_header = self.create_wcs()
+            
         self.map_shape = self.pca_out.getdata('Mask').shape
         self.mask = self.pca_out.mask
         fig, gs, ax1, ax2 = self.__setup_qty_fig__()
+        fig.suptitle(self.pca_out.get_plateifu() + ' ' + self.qty_tex)
+
         
         m, s, mcb, scb, scale = self.qty_map(
             qty_str=qty_str, ax1=ax1, ax2=ax2, f=f, logify=logify,
             TeX_over=TeX_over)
 
         # fig.suptitle('{}: {}'.format(self.objname, qty_tex))
-
-        self.__fix_im_axs__([ax1, ax2])
+        print(self.wcs_header)
+        if self.wcs_proper == True:
+            self.__fix_im_axs__([ax1, ax2])
         
 
         #TODO: find self.objname
@@ -439,6 +463,7 @@ class qtyFig():
         scb.set_label(sigma_TeX, size=8)
         scb.ax.tick_params(labelsize='xx-small')
 
+
         return m, s, mcb, scb, scale
 
 
@@ -482,9 +507,10 @@ class qtyFig():
                 # figures_tools.annotate_badPDF(ax, self.goodPDF)
                 pass
     def __setup_qty_fig__(self):
-        fig = plt.figure(figsize=(8, 6), dpi=80)
-        gs = gridspec.GridSpec(1, 2, wspace=.4, left=.12, right=.93,
+        fig = plt.figure(figsize=(7, 3), dpi=80)
+        gs = gridspec.GridSpec(1, 2, wspace=.5, left=.12, right=.93,
                                bottom=.10, top=.85)
+        
         ax1 = fig.add_subplot(gs[0], projection=self.wcs_header)
         ax2 = fig.add_subplot(gs[1], projection=self.wcs_header)
         
@@ -508,8 +534,24 @@ class qtyFig():
             ax.pcolor(II, JJ,
                       np.ma.array(np.zeros_like(IIc), mask=self.pca_out['SUCCESS']),
                       hatch='.' * 8, alpha=0.)
-
+        
         return fig, gs, ax1, ax2
 
-result = PCAOutput.from_fname('/Users/admin/Desktop/stellarmass_pca/8144-3704_res.fits')
-result.quantity_figure('MLi')
+    def create_wcs(self):
+        data = self.pca_out.getdata(self.qty_str)[0]
+        x_center = (len(data[0]) + 1)/2
+        y_center = (len(data[:,0]) + 1)/2
+        
+        w = wcs.WCS(naxis = 2)
+        w.wcs.crpix = [x_center, y_center]
+        w.wcs.crval = [0, 0]
+        w.wcs.cdelt = np.array([-0.5, 0.5])
+        w.wcs.ctype = ['RA', 'DEC']
+        return w
+
+
+
+
+# result = PCAOutput.from_fname('/Users/admin/Desktop/stellarmass_pca/8144-3704_res.fits')
+# result.quantity_figure('MLi')
+
