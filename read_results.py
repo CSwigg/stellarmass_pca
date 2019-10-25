@@ -39,8 +39,9 @@ def set_result_directory(user_input):
    
 def set_csp_directory(user_input):
 
-    os.envrion['STELLARMASS_PCA_CSPBASE'] = str(user_input)
-    csp_basedir = os.envrion['STELLARMASS_PCA_CSPBASE']
+    if os.path.isdir(user_input):
+        os.envrion['STELLARMASS_PCA_CSPBASE'] = str(user_input)
+        csp_basedir = os.envrion['STELLARMASS_PCA_CSPBASE']
 
 class PCASystem(fits.HDUList):
     @property
@@ -89,25 +90,31 @@ class PCAOutput(fits.HDUList):
         return ret
     
     @classmethod
-    def from_plateifu(cls, basedir, plate, ifu, *args, **kwargs):
+    def from_plateifu(cls, plate, ifu, basedir = '', *args, **kwargs):
         """ Constructs an instanceof PCAOutput form a given results FITS file. 
         
         Parameters
         ----------
-        basedir : str
-            Directory to base of all plates
+        
         plate : str
             Number of plate
         ifu : [type]
             Number of ifu
-        
+        basedir : str
+            Optional parameter for inputing a custom directory 
         Returns
         -------
         ret : __main__.PCAOutput
             Returns construction of PCAOutput() instance
         """
-        fname = os.path.join(basedir, '{}-{}'.format(plate, ifu),
-                             'mangapca-{}-{}'.format(plate, ifu))
+
+        if not basedir:
+            fname = os.path.join(manga_results_basedir, str(plate),
+                                'mangapca-{}-{}.fits'.format(plate, ifu))
+        else:
+            fname = os.path.join(basedir, str(plate),
+                                'mangapca-{}-{}.fits'.format(plate, ifu))
+       
         return super().fromfile(fname, *args, **kwargs)
     
     def get_plateifu(self):
